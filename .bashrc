@@ -121,6 +121,9 @@ fi
 # my additions
 set -o vi # use Vi keybindings in the terminal
 
+# This pertains to the repo at github.com/umrosbrian/dotfiles and is described in the README.md file.
+alias dotfiles="/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME"
+
 #change colors that ls displays to make it more readable on tmux's white background
 #found this at https://askubuntu.com/questions/466198/how-do-i-change-the-color-for-directories-with-ls-in-the-console
 LS_COLORS=$LS_COLORS:'ex=0;35:' ; export LS_COLORS #makes executables purple
