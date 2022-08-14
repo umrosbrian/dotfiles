@@ -1,0 +1,453 @@
+# vim: set filetype=sh :
+#the commented line above is a vim modeline...vim reads it upon opening the document...it effectively tells vim that the document should have the syntactical color scheme of a .sh file...without it this document would just show in black and white
+
+makeShScript () {
+  #check if the file already exists...this function would clobber a pre-existing file
+  if [ $(ls "$1.sh" 2> /dev/null) ]
+  then 
+          echo "$1.sh already exists"
+  else
+          touch "$1.sh"
+          chmod +x "$1.sh"
+          #add shebang
+          echo '#!/bin/bash' > "$1.sh"
+          #set IFS
+          echo "IFS=$'\\n'" >> "$1.sh"
+	  #source functions
+	  echo "source ~/.functions" >> "$1.sh"
+          echo -e "\n" >> "$1.sh"
+          #open in insert mode at line 5
+          vim +startinsert +5 "$1.sh"
+  fi  
+}
+
+makePyScript () {
+  #check if the file already exists...this function would clobber a pre-existing file
+  if [ $(ls "$1.py" 2> /dev/null) ]
+  then 
+          echo "$1.py already exists"
+  else
+          touch "$1.py"
+          chmod 775 "$1.py"
+          #add shebang
+          echo '#!/usr/bin/env python3' > "$1.py"
+          echo -e "\n" >> "$1.py"
+          #open in insert mode at line 3
+          vim +startinsert +3 "$1.py"
+  fi  
+}
+
+query () {
+  #to allow for a multi-line query I'm going to replace all \n characters with a space
+  sqlString=$(echo "$1" | tr '\n' ' ')
+  #remove sql_log if there happens to be one from a previous use of this query
+  rm sql_log 2>/dev/null
+  #can't say that I understand how the redirection works but it pushes stderr to both the terminal and a file...the -a option of tee appends the stderr to the file
+  #queryResults=$(PGPASSWORD=changethis psql -t -h pgicam-prod-db.umms.med.umich.edu -U rosbrian sahmdb -c "$sqlString" 2> >(tee -a sql_log >&2))
+  #queryResults=$(PGPASSWORD=postgres psql -t -h localhost -U postgres darterdb -c "$sqlString" 2> >(tee -a sql_log >&2))
+  queryResults=$(PGPASSWORD=postgres psql -t -h localhost -U postgres macdb -c "$sqlString" 2> >(tee -a sql_log >&2))
+  #print a message if sql_log wasn't empty...otherwise, remove it
+  if [ -s sql_log ]
+  then echo "there was a SQL error...it's recorded in ./sql_log"
+  else rm sql_log
+  fi
+	#I want the function to return a non-zero exit status if the query fails...note that this chunck needs to be at the end of the function since the if command's exit status is what's going to be returned from the function
+	if [ $? -ne 0 ]
+	then
+		#I'm intentionally using a command that I know will produce a non-zero exit status...it could be any command...not just mkdir
+		mkdir 2> /dev/null
+	else
+		echo "$queryResults" | sed 's/^[[:space:]]*//;/^$/d;s/[[:space:]]*|[[:space:]]*/|/g'
+	fi
+}
+
+pickFromList () {
+	#this takes a list of values as an input, numbers them, prompts for the the line number correcsponding to the correct value then returns the value #because the input values can come in the form of variables, cat'd files or arrays you need to format their input a little differetly for this function...see the three examples below
+	#for variables: pickFromList "$myVar"
+	#for files: myVar=$(cat <filename>); pickFromList "$myVar"
+	#for arrays: myVar=$(for value in ${myArr[@]}; do echo "$value"; done); pickFromList "$myVar"
+
+	#number each line (containing a value) of $1
+	counter=1
+	for line in $(echo "$1")
+	do
+		echo "$counter  $line"
+		counter=$((counter + 1))
+	done > /tmp/pickFromListValues.txt
+
+	#find the lowest numbered inactive tmux pane to view the query output...currently I don't make a new pane if only one is found but I should do that in the future
+	inactivePane=$(tmux list-panes | grep -v 'active' | cut -d":" -f1 | sort -n | head -1)
+	#show the file having numbered values in the $inactivePane
+	tmux run-shell -t $inactivePane "cat /tmp/pickFromListValues.txt"
+	read -p "which is the matching line number from the other tmux pane? " matchingLine
+	matchingValue=$(sed -n "${matchingLine}p" /tmp/pickFromListValues.txt | sed "s/^[0-9]*  //")
+	echo "$matchingValue"
+	#clear the $inactivePane...you manually do this any time using Ctrl + C while in the pane
+	tmux clear-history -t $inactivePane
+}
+
+#this searches $1 for a term then returns both the filename containing a match and the line containing the match
+#it would be really nice to have the grepped match maintain the red coloring...look at the compression fx script for this
+#I could add a subdirectory of ~/bin as a second argument so that not all .sh files in bin are grepped...if the second argument isn't there it wouldn't be used and all of ~/bin would be searched
+searchFiles () {
+  IFS=$'\n'
+  for filename in $(find "$1" -type f)
+  do match=$(grep -i "$2" "$filename")
+    if [ $? -eq 0 ] 
+    then
+      match=$(echo "$match" | sed 's/^[[:space:]]*//')
+      #echo -e "$filename:\n\t$match"
+      echo -e "$filename" # this will just print the absolute path for a file having the matched pattern
+    fi  
+  done
+}
+
+#replace single quotes with two single quotes to make a string SQL compliant
+sqlQuotes () {
+	echo "$(echo "$1" | sed "s/'/''/g")"
+}
+
+# This is a general-purpose function to ask Yes/No questions in Bash, either
+# with or without a default answer. It keeps repeating the question until it
+# gets a valid answer.
+# I got this from https://gist.github.com/davejamesmiller/1965569#file-ask-sh
+
+askYN() {
+    local prompt default reply
+
+    if [ "${2:-}" = "Y" ]; then
+        prompt="Y/n"
+        default=Y
+    elif [ "${2:-}" = "N" ]; then
+        prompt="y/N"
+        default=N
+    else
+        prompt="y/n"
+        default=
+    fi
+
+    while true; do
+
+        # Ask the question (not using "read -p" as it uses stderr not stdout)
+        echo -n "$1 [$prompt] "
+
+        # Read the answer (use /dev/tty in case stdin is redirected from somewhere else)
+        read reply </dev/tty
+
+        # Default?
+        if [ -z "$reply" ]; then
+            reply=$default
+        fi
+
+        # Check if the reply is valid
+        case "$reply" in
+            Y*|y*) return 0 ;;
+            N*|n*) return 1 ;;
+        esac
+
+    done
+}
+
+# EXAMPLE USAGE:
+# The function just returns an exit status...use if to test the return status
+#
+#if askYN "Do you want to do such-and-such?"; then
+#    echo "Yes"
+#else
+#    echo "No"
+#fi
+#
+## Default to Yes if the user presses enter without giving an answer:
+#if askYN "Do you want to do such-and-such?" Y; then
+#    echo "Yes"
+#else
+#    echo "No"
+#fi
+#
+## Default to No if the user presses enter without giving an answer:
+#if askYN "Do you want to do such-and-such?" N; then
+#    echo "Yes"
+#else
+#    echo "No"
+#fi
+#
+## Only do something if you say Yes
+#if askYN "Do you want to do such-and-such?"; then
+#    echo "Yes"
+#fi
+#
+## Only do something if you say No
+#if ! askYN "Do you want to do such-and-such?"; then
+#    echo "No"
+#fi
+#
+## Or if you prefer the shorter version:
+#askYN "Do you want to do such-and-such?" && echo "Yes"
+#
+#askYN "Do you want to do such-and-such?" || echo "No"
+
+#usage: 'nullIf $variableName'
+#returns 'NULL' if the variable is either blank or hasn't been initiallized or will return the value that the variable has been assigned if not blank
+nullIf () {
+	if [ -z "$1" ]
+	then
+		echo "NULL"
+	else
+		echo "$1"
+	fi
+}
+
+#usage: 'checkVar variableName'
+#${!1} is like preceding $1 with a $...it takes the variable name and precedes it with a $ in order to expand it
+checkVar () {
+	if [ -z "${!1}" ]
+	then
+		echo "$1 is either empty or hasn't been initialized"
+	else
+		echo "$1: ${!1}"
+	fi
+}
+
+pause () {
+  read -p "hit any key to continue" pause
+}
+
+#usage: '(command) & spinner'
+#found this at http://fitnr.com/showing-a-bash-spinner.html
+spinner() {
+    local pid=$!
+    local delay=0.75
+    local spinstr='|/-\'
+    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+        local temp=${spinstr#?}
+        printf " [%c]  " "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
+
+#usage: ;(command) & copySpinner targetDirectory' where targetDirectory is where the files are being moved to and you want to monitor
+copySpinner() {
+    local pid=$!
+    local delay=5
+    local spinstr='|/-\'
+    local targetDir="$1"
+    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+      echo -ne "$(ls "$targetDir" | wc -l) files transferred"\\r
+        sleep $delay
+    done
+}
+
+#usage: 'headerValues filename'
+#return the tag name and its value delimited with '|'
+headerValues () {
+  dcm2xml "$1" | awk -v FS="name=" '{print $2}' | tr -d '"' | cut -d"<" -f1 | tr '>' '|' | sed '/Unknown Tag/d;/^[[:space:]]*$/d;/Little Endian Explicit/d;/ApplicationHeaderInfo/d;s/\&amp\;/ \& /g'
+}
+
+play () {
+  for fileName in $(find . -mindepth 1 -maxdepth 1 -name '*\.mp3' | sort)
+  do mplayer "$fileName"
+  done
+}
+
+playRandom () {
+  #remove the files played during the last running of this function
+  rm filesPlayed.txt 2> /dev/null
+  #make a list of all files
+  read -p "generate new list of files (y/n)?: " newList
+  if [ $newList = 'y' ]
+  then echo "finding all .mp3 files" 
+    fileList=$(find . -mindepth 1 -type f -name '*\.mp3')
+    echo "$fileList" > allMp3Files.txt
+  else
+    fileList=$(cat allMp3Files.txt)
+  fi
+  #get the length of the list...will be used to get a random number that's known to be under the list's length
+  listLength=$(echo "$fileList" | wc -l)
+  while true
+  do
+    #generate random number
+    randomN=$(echo $((1 + RANDOM % listLength)))
+    #get the filename corresponding to the line number of randomN
+    fileName=$(echo "$fileList" | sed -n "${randomN}p")
+    echo "$fileName" >> filesPlayed.txt
+    mplayer "$fileName"
+  done
+}
+
+titleTags () {
+  for fileName in $(find . -type f)
+  do title=$(id3v2 -R "$fileName" | grep TIT2 | sed 's/TIT2: //' | grep -i "$1")
+    if [ "$title" != '' ]
+    then echo "$fileName: $title"
+    fi
+  done
+}
+
+#usage: 'rcp source destination'
+rcp () {
+  #if there's a trailing / in the source path the contents of the source's last listed directory will be copied but not the directory itself...I don't like this behavior so I'm going to remove a trailing /...if one is desired simply use two since sed will only remove one
+  sourcePath=$(echo "$1" | sed 's/\/$//')
+  rsync -ah --info=progress2 --stats "$sourcePath" "$2"
+}
+
+actVE () {
+    case $HN in
+        webservervm)
+            source ~/webserver/venv/bin/activate
+            echo "~/webserver/venv activated"
+            ;;
+        mini\.local)
+            source ~/python3.9.6ve/bin/activate
+            echo "~/python3.9.6ve activated"
+            ;;
+    esac 
+}
+
+#this one is for Linux
+#playDir () {
+#  for fileName in $(find . -mindepth 1 -maxdepth 1 -name '*\.[mM][pP]3' | sort)
+#  do mpg123 "$fileName"
+#  done
+#}
+
+#this one is for macOS
+playdir() {
+    for fileName in $(find . -mindepth 1 -maxdepth 1 -name '*\.[mM][pP]3' | sort)
+    do afplay "$fileName"
+    done
+}
+
+playDirRandom () {
+  for fileName in $(find . -mindepth 1 -maxdepth 1 -name '*\.[mM][pP]3' | sort -R)
+  do mpg123 "$fileName"
+  done
+}
+
+playRandom () {
+  #remove the files played during the last running of this function
+  rm filesPlayed.txt 2> /dev/null
+  #make a list of all files
+  read -p "generate new list of files (y/n)?: " newList
+  if [ $newList = 'y' ]
+  then echo "finding all .mp3 files" 
+    fileList=$(find . -mindepth 1 -type f -name '*\.[mM][pP]3')
+    echo "$fileList" > allMp3Files.txt
+  else
+    fileList=$(cat allMp3Files.txt)
+  fi
+  #get the length of the list...will be used to get a random number that's known to be under the list's length
+  listLength=$(echo "$fileList" | wc -l)
+  while true
+  do
+    #generate random number
+#    randomN=$(echo $((1 + RANDOM % listLength))) #this method doesn't produce number > ~ 60000 regardless of listLength
+    randomN=$(shuf -i 1-$listLength -n 1) #-i is used to define the range, -n gives the number of lines returned
+    #get the filename corresponding to the line number of randomN
+    fileName=$(echo "$fileList" | sed -n "${randomN}p")
+    echo "$fileName" >> filesPlayed.txt
+    #I'd like to use play as a player since it shows clipping but it lacks forward/reverse and sometimes skips tracks
+    mpg123 "$fileName"
+  done
+}
+
+mountPi8TB () {
+    echo "Hit 'Enter' when prompted for the drive's password."
+  sudo mount -t cifs -o username=pi,uid=$(id -u),gid=$(id -g) //192.168.1.100/pi8TB ~/nas
+}
+
+unmountNetworkDrives () {
+  sudo umount ~/z
+}
+
+mountNetworkDrives () {
+    case $HN in
+        webservervm)
+            sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.31.192.39/Shared3/Surg-MAG ~/z
+            sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.31.192.39/Shared3/Surgery-ICAM ~/y
+            ;;
+                
+        mini\.local)
+            mount -t smbfs //10.31.192.39/Shared3/Surg-MAG/users/rosbrian ~/z
+            ;;
+        raspberrypi)
+            foo=bar
+            ;;
+        pop-os)
+            foo=bar
+            ;;
+    esac
+} 
+
+#mountNetworkDrives () {
+#    # this can only be issued from a machine that has a vpn connection, which means the mini
+#  mount -t smbfs //10.31.192.39/Shared3/Surg-MAG/users/rosbrian ~/z
+##	#sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.31.192.39/Shared3/Surg-MAG /mnt/z
+##	#sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.30.219.143/Shared2/Surg-ICAM/ /mnt/t
+##	#sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.31.192.39/Shared3/Surgery-ICAM /mnt/y
+##	#sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.30.219.143/rosbrian /mnt/h
+#}
+
+appleKeyboard () {
+  #opens the file needed to correct keyboard bindings when the apple keyboard is attached via USB while the machine is running...switch the value to '0' and close
+  #sudo echo 0 > /sys/module/hid_apple/parameters/fnmode
+  sudo vim /sys/module/hid_apple/parameters/fnmode
+}
+
+vpnOn () {
+  #start the vpn
+  sudo openconnect -b vpn.med.umich.edu
+  #mount the network drives
+	#sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.31.192.39/Shared3/Surg-MAG /mnt/z
+	#sudo mount -t cifs -o username=rosbrian,domain=UMHS,uid=$(id -u),gid=$(id -g) //10.31.192.39/Shared3/Surgery-ICAM /mnt/y
+}
+
+vpnOff () {
+  #unmount the network drives
+  sudo umount ~/z
+  #kill the pid my matching the process name
+  sudo pkill openconnect
+}
+
+displaySleep () {
+  #make the displays sleep and wake upon keyboard activity
+  pmset displaysleepnow
+}
+
+ssOn () {
+  #ssOn stands for Screen Saver On
+  #turns on screen saver...keyboard or mouse activity turns it off
+  open /System/Library/CoreServices/ScreenSaverEngine.app
+}
+
+copyVimrcs () {
+  #copy both .vimrc and .ideavimrc from  the z drive to home dir
+  if [ -f ~/z/.vimrc ] && [ -f ~/z/.ideavimrc ]
+  then
+    cp ~/z/.vimrc ~/z/.ideavimrc ~
+  else
+    echo "The files '.vimrc' and/or '.ideavimrc' weren't found.  You may need to issue 'mountNetworkDrives'."
+  fi
+}
+
+ghpat () {
+    # The idea is to issue this function to put my github PAT into the clipboard so that I can use Cmd + v to paste it
+    # Because the vm doesn't have a clipboard I'll need to open vim on the mini.
+    if [ $(hostname | tr -d '\n')  = mini\.local  ]
+    then 
+        # The file containing the PAT is encrypted.  Prompt for the file's password.  The -s option won't show what's being input by the user.
+        #read -s -e -p "~/github_pat.txt password: " pwrd 
+        #Vim will open using the commands to 1) use the password 2) copy the file's contents to the clipboard and 3) quit
+        #vim --cmd "set key=${pwrd}" -c ':%w !pbcopy' -c ':q' ~/github_pat.txt
+        # Vim will open using the commands to 1) use the password 2) copy the file's contents to the clipboard and 3) quit
+        # The 'pbcopy' portion is specific to MacOS.  See https://stackoverflow.com/questions/3961859/how-to-copy-to-clipboard-in-vim for other ways to copy to system clipboard.  In any case, since Ubuntu Server doesn't have X11 I don't think I'll be able to get the idea of putting the PAT anywhere on the VM.
+        # The assignment for the variable GHPWRD is hardcoded in the file /home/rosbrian/envars.  This file is sourced from .bashrc, which means that each shell will have this envrionmental variable.  The variable's value matches the encryption password for the github_pat.txt file
+        vim --cmd "set key=${GHPWRD}" -c ':%w !pbcopy' -c ':q' github_pat.txt
+        echo "PAT copied to clipboard."
+    else
+        echo "This function needs to be openned on the mini since a clipboard is needed"
+    fi 
+
+}

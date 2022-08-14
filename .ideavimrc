@@ -1,0 +1,142 @@
+"in datagrip execute :source ~/.ideavimrc or :source z:\users\rosbrian\.ideavimrc to source this file
+
+let mapleader = " "
+" disable beeps
+set visualbell
+
+"comment sql line
+nnoremap <leader>cls ^i--<Esc>
+"comment python line
+nnoremap <leader>clp ^i# <Esc>
+
+"uncomment sql line
+nnoremap <leader>uls :s/^\([[:space:]]*\)\(--\)/\1<CR>
+"uncomment python line
+nnoremap <leader>ulp :s/^\([[:space:]]*\)\(#\)/\1<CR>hx
+
+"highlight a commented line in order for Ctrl + Return to be hit to execute it
+nnoremap <leader>hcl 0ll<C-v>$
+"nnoremap <leader>hcl $F-l<C-v>$
+
+"print out a select query with a limit of 1 for the purposes of seeing the column names
+nnoremap <leader>cols iselect * from limit 1;<Esc>2Fma<Space>
+
+"print out a select query to count records in a table
+nnoremap <leader>cnt iselect count(*) from<Space>
+
+"comment sql block...move cursor to first line, type 'mt' to set a mark, type the last line number, execute the shortcut...
+"it jumps to the last line then does a substitution with the range being from the mark to the current line
+nnoremap <leader>cbs G:'t,.s/^/--/<CR>
+"comment python block...move cursor to first line, type 'mt' to set a mark, type the last line number, execute the shortcut...
+"it jumps to the last line then does a substitution with the range being from the mark to the current line
+nnoremap <leader>cbp G:'t,.s/^/#/<CR>
+
+"uncomment sql block...same as the comment block shortcut but the 't at the end moves the cursor back to the mark
+nnoremap <leader>ucbs G:'t,.s/^--//<CR>'t
+"uncomment python block...same as the comment block shortcut but the 't at the end moves the cursor back to the mark
+nnoremap <leader>ucbp G:'t,.s/^#//<CR>'t
+
+"indent a python block...move cursor to first line, type 'mt' to set a mark, type the last line number, execute the shortcut
+nnoremap <leader>ib G:'t,.s/^/    /<CR>
+"unindent a python block...move cursor to first line, type 'mt' to set a mark, type the last line number, execute the shortcut
+nnoremap <leader>uib G:'t,.s/^    //<CR>
+
+"add comma to a block...move cursor to first line, type 'mt' to set a mark, type the last line number, execute the shortcut...
+"it jumps to the last line then does a substitution with the range being from the mark to the current line
+"the shortcut 'c' stands for 'commaquote'
+"nnoremap <leader>com G:'t,.s/$/,/<CR> "just can't get this to work!
+
+"add single quotes and a comma to a block...move cursor to first line, type 'mt' to set a mark, type the last line number, execute the shortcut...
+"it jumps to the last line then does a substitution with the range being from the mark to the current line
+"the shortcut 'cq' stands for 'comma quote'
+nnoremap <leader>cq :'t,.s/^/'/<CR>:'t,.s/$/',<CR>:.s/,$//<CR>
+
+"add parenthesis, single quotes and a comma to a block...move cursor to first line, type 'mt' to set a mark, type the last line number, execute the shortcut...
+"it jumps to the last line then does a substitution with the range being from the mark to the current line
+"the shortcut 'pcq' stands for 'parenthesis comma quote'
+nnoremap <leader>pcq :'t,.s/^/('/<CR>:'t,.s/$/'),<CR>:.s/,$//<CR>
+
+"add parenthesis and comma to block...make values from numerics
+"'ntv' stands for 'numeric to values'
+nnoremap <leader>ntv :'t,.s/^/(/<CR>:'t,.s/$/),<CR>:.s/,$//<CR>
+
+"add 'explain analyze' at the start of the current row then move cursor to start
+nnoremap <leader>ea 0iexplain<Space>analyze<Space><Esc>0
+
+"print 'set search_path to '
+nnoremap <leader>ssp iset search_path to rosbrian,sahm,registry,public;<Esc>
+
+"join lines without adding a space
+nnoremap <leader>jl $Jx
+
+"do Ctrl+Alt+U to show columns of table under cursor
+
+"remove the closing parenthesis after they're automatically generated...
+"moves the cursor to the right of the opening parenthesis then backspaces
+:inoremap <C-p> <Right><Right><BS>
+
+"inserts a horizontal line for the purposes of delimiting blocks
+:inoremap HL <Esc>160i-<Esc>o
+
+"make a C-style commented line and position cursor to be within the comment
+:inoremap CL /**/<Left><Left>
+
+"jump back to after 'select' when writing 'select from ...'
+:inoremap JB <Esc>06li<Space>
+
+"jump out to the right side of closed parenthesis or single quotes
+:inoremap JO <Right>
+
+"cancel auto-fill without having to escape
+:inoremap NF <Esc>a
+
+"with the cursor inside a single quoted string you can do vi' to highlight everything within the single quotes
+"with the cursor anywhere between a pair of parenthesis hit vib to highlight everything between them
+
+"allow gcc and gc{motion} commenting...couldn't get this to work
+"set commentary
+
+"rather than printing 'j' in insert mode use it like it's in normal mode and move down a line
+:inoremap jj <Esc>ji
+
+"print 'rosbrian.'
+:inoremap RB rosbrian.
+
+"print 'rdw_userspace.'
+:inoremap RU rdw_userspace.rosbrian.
+
+"print 'rdw_views.'
+:inoremap RV rdw_views.dbo.
+
+"print 'registry.'
+:inoremap RG registry.
+
+""print 'sql_composed = sql.SQL("").format()' by typing 'SC'
+""this will go into insert mode after the first double quote
+"inoremap SC sql_composed = sql.SQL("").format()<Esc>2F"a
+
+""print 'print(sql_composed.as_string(pgdb.conn))' by typing 'PC'
+"inoremap PC print(sql_composed.as_string(pgdb.conn))
+
+""print 'pgdb.curs.execute(sql_composed)' by typing 'EC'
+""this will go into insert mode after 'sql_composed' in order to provide a
+""list/tuple for any '%s' placeholder
+"inoremap EC pgdb.curs.execute(sql_composed)
+
+""print 'pgdb.attempt_commit()' by typing 'AC'
+"inoremap AC pgdb.attempt_commit()
+
+""print 'pgdb.fetchone()' by typing 'FO'
+"inoremap FO pgdb.curs.fetchone()
+
+""print 'pgdb.fetchall()' by typing 'FA'
+"inoremap FA pgdb.curs.fetchall()
+
+"print 'import importlib'
+:inoremap II import importlib<Enter>
+
+" print 'importlib.reload()' and move cursor within parenthesis
+:inoremap IR importlib.reload()<Esc>2ji
+
+" print the typical umpirecases, study, study_tags query
+nnoremap <leader>uss iselect<Enter>from sahm.umpirecases uc<Enter>join sahm.study s on s.umpireid = uc.umpireid<Enter>join sahm.study_tags st on s.studyid = st.studyid and tagid = 3 and tag_contents = ''<Esc>2ji
