@@ -1,3 +1,5 @@
+I've abandoned this repo and switched back to using the `debian_home` repo since I found no advantage to using this method.
+
 This setup uses a _bare_ git repo titled `$HOME/.dotfiles`, which eliminates the issues involved with having a .git directory reside in your home directory.  The alias `dotfiles` is created, which replaces `git` in all cases where you'd normally use the later command.
 
 I found this in a SO post but it's best descibed [here](https://www.atlassian.com/git/tutorials/dotfiles).
